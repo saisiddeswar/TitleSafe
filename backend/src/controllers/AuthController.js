@@ -1,8 +1,11 @@
 const User = require('../models/usermodel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();  // Ensure you have dotenv configured
 
-// Login Function
+const JWT_SECRET = process.env.JWT_SECRET || 'MY_SECRET_TOKEN';
+
+// 🟢 Login Function
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -13,7 +16,6 @@ const login = async (req, res) => {
 
         // Check if the user exists
         const user = await User.findOne({ email });
-        console.log("User fetched from DB:", user); // Debugging log
         if (!user) {
             return res.status(400).json({ message: 'User not found.' });
         }
@@ -25,23 +27,20 @@ const login = async (req, res) => {
         }
 
         // Generate JWT token
-        const payload = {
-            username: user.username, // Use user.username from the database
-            email: user.email,      // Optional: Include email in the payload if needed
-        };
-        console.log("Payload for JWT:", payload); // Debugging log
-        const jwtToken = jwt.sign(payload, 'MY_SECRET_TOKEN', { expiresIn: '1h' });
+        const payload = { username: user.username, email: user.email };
+        const jwtToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 
-        // Send the token in a cookie and as a response
-        res.cookie('jwtToken', jwtToken, { httpOnly: true, secure: false }); // Set secure: true in production
+        // Set token in a cookie
+        res.cookie('jwtToken', jwtToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+
         res.status(200).json({ message: 'Login successful', jwtToken });
     } catch (error) {
-        console.error(error);
+        console.error('Login error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
 
-// Signup Function
+// 🟢 Signup Function
 const signup = async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -50,39 +49,30 @@ const signup = async (req, res) => {
             return res.status(400).json({ message: 'Username, email, and password are required.' });
         }
 
-        // Check if the email already exists
-        const existingUser = await User.findOne({ email });
+        // Check if username or email already exists
+        const existingUser = await User.findOne({ $or: [{ username }, { email }] });
         if (existingUser) {
-            return res.status(400).json({ message: 'Email is already registered.' });
+            return res.status(400).json({ message: 'Username or email already exists.' });
         }
 
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create new user
-        const user = await User.create({
-            username,
-            email,
-            password: hashedPassword,
-        });
-        console.log("Newly created user:", user); // Debugging log
+        const user = await User.create({ username, email, password: hashedPassword });
 
         // Generate JWT token
-        const payload = {
-            username: user.username, // Use the username of the newly created user
-            email: user.email,       // Optional: Include email in the payload if needed
-        };
-        console.log("Payload for JWT:", payload); // Debugging log
-        const jwtToken = jwt.sign(payload, 'MY_SECRET_TOKEN');
+        const payload = { username: user.username, email: user.email };
+        const jwtToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 
-        // Send the token in a cookie and as a response
-         res.send({ jwtToken });;
+        // Set token in a cookie
+        res.cookie('jwtToken', jwtToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+
+        res.status(201).json({ message: 'User registered successfully', jwtToken });
     } catch (error) {
-        console.error(error);
+        console.error('Signup error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
-
-
 
 module.exports = { login, signup };
